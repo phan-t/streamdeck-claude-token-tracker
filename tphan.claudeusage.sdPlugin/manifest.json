@@ -1,0 +1,46 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"UUID": "tphan.claudeusage",
+	"Name": "Claude Usage",
+	"Version": "0.1.0.0",
+	"Author": "Tony Phan",
+	"Description": "Show your Claude usage — current session and weekly — as horizontal bar gauges with reset countdowns. Reads the credentials Claude Code stores in your macOS Keychain; no login needed.",
+	"Category": "Claude Usage",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"Icon": "imgs/plugin/icon",
+	"URL": "https://github.com/phan-t/streamdeck-claude-token-tracker",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.5"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		}
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"CodePath": "bin/plugin.js",
+	"Actions": [
+		{
+			"Name": "Session & Weekly Usage",
+			"UUID": "tphan.claudeusage.tracker",
+			"Icon": "imgs/actions/usage/icon",
+			"Tooltip": "Your current session and weekly Claude usage, with time-to-reset.",
+			"Controllers": [
+				"Keypad"
+			],
+			"PropertyInspectorPath": "ui/inspector.html",
+			"States": [
+				{
+					"Image": "imgs/actions/usage/key",
+					"TitleAlignment": "middle",
+					"FontSize": 14
+				}
+			]
+		}
+	]
+}

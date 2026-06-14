@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+	</head>
+	<body>
+		<sdpi-item label="Refresh">
+			<sdpi-range setting="refreshSeconds" min="60" max="600" step="30" default="300" showlabels></sdpi-range>
+		</sdpi-item>
+
+		<sdpi-item label="Help">
+			<div style="font-size: 11px; line-height: 1.4; opacity: 0.85">
+				Reads the OAuth token Claude Code stores in your macOS Keychain
+				(<code>Claude&nbsp;Code-credentials</code>) and calls Anthropic's usage
+				endpoint — no login here. The first poll may show a Keychain access prompt;
+				choose <b>Always Allow</b>. Press the key any time to refresh now. The usage
+				endpoint is rate-limited, so keep the interval at 60s or higher.
+			</div>
+		</sdpi-item>
+	</body>
+</html>

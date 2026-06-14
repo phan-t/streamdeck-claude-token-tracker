@@ -1,0 +1,7 @@
+node_modules/
+.claude/settings.local.json
+tphan.claudeusage.sdPlugin/bin/
+tphan.claudeusage.sdPlugin/logs/
+*.streamDeckPlugin
+*.log
+.DS_Store
