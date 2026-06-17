@@ -33,8 +33,7 @@ export type BarRow = {
  * countdown sits beneath the bar as subtext.
  *
  * When `stale` is set (the last fetch failed / was rate-limited) the gauges are
- * dimmed and a small amber dot is shown so the last-good reading stays on screen
- * but visibly reads as "not live".
+ * dimmed so the last-good reading stays on screen but visibly reads as "not live".
  */
 export function barsImage({ rows, stale = false }: { rows: BarRow[]; stale?: boolean }): string {
 	const blockH = (SIZE - MARGIN * 2) / rows.length;
@@ -63,13 +62,12 @@ export function barsImage({ rows, stale = false }: { rows: BarRow[]; stale?: boo
 		})
 		.join("\n\t");
 
-	// Dim the gauges when stale; keep the status dot bright (outside the group).
+	// Dim the gauges when stale (last-good data, not live).
 	const content = stale ? `<g opacity="0.5">\n\t${body}\n\t</g>` : body;
-	const staleDot = stale ? `\n\t<circle cx="${SIZE - 9}" cy="9" r="4" fill="#FFCC00"/>` : "";
 
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
 	<rect width="${SIZE}" height="${SIZE}" fill="#000000"/>
-	${content}${staleDot}
+	${content}
 </svg>`;
 
 	return toDataUri(svg);

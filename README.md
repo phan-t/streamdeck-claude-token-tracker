@@ -15,7 +15,7 @@ The layout (bars, fonts, sizes) mirrors [streamdeck-enphase](https://github.com/
 - The first poll triggers a one‑time macOS Keychain access prompt — choose **Always Allow** so the plugin can read the token unattended. Claude Code keeps the token refreshed; the plugin just reads the latest value each cycle.
 - **Configurable refresh** in the property inspector (default 300s). The usage endpoint is aggressively rate‑limited, so the minimum is 60s — and if it returns `429` the plugin automatically backs off (honouring `Retry-After`, else exponentially up to 30 min) and recovers on the next success.
 - **Manual refresh:** press the key to fetch immediately.
-- **Stays readable when offline.** If a poll fails or is rate‑limited, the last‑good reading stays on the key — dimmed, with a small amber dot — instead of flipping to the setup screen. The setup screen only appears when there's no reading yet (first run / not signed in).
+- **Stays readable when offline.** If a poll fails or is rate‑limited, the last‑good reading stays on the key — dimmed to read as "not live" — instead of flipping to the setup screen. The setup screen only appears when there's no reading yet (first run / not signed in).
 - The OAuth token is cached in memory until shortly before it expires, so steady polling doesn't shell out to the Keychain every cycle (it re‑reads on expiry or a `401`).
 
 > macOS only — the credentials live in the macOS Keychain.
