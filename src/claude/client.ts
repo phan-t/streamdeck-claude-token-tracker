@@ -29,13 +29,19 @@ export class ClaudeError extends Error {
 	readonly unauthorized: boolean;
 	/** The request was rate-limited (HTTP 429); back off before retrying. */
 	readonly rateLimited: boolean;
+	/** The Keychain item exists but the read was blocked (locked / not approved). */
+	readonly keychainBlocked: boolean;
 	/** Server-advised wait before retrying, in millis (from a Retry-After header). */
 	readonly retryAfterMs?: number;
 
-	constructor(message: string, opts: { unauthorized?: boolean; rateLimited?: boolean; retryAfterMs?: number } = {}) {
+	constructor(
+		message: string,
+		opts: { unauthorized?: boolean; rateLimited?: boolean; keychainBlocked?: boolean; retryAfterMs?: number } = {},
+	) {
 		super(message);
 		this.unauthorized = !!opts.unauthorized;
 		this.rateLimited = !!opts.rateLimited;
+		this.keychainBlocked = !!opts.keychainBlocked;
 		this.retryAfterMs = opts.retryAfterMs;
 	}
 }
@@ -46,31 +52,45 @@ let inflight: Promise<ClaudeReadings> | undefined;
 // (or re-read the credentials file) every cycle — only near expiry or after a 401.
 let tokenCache: { token: string; expiresAt: number } | undefined;
 
-/** Read a raw secret from the macOS login Keychain via the `security` CLI. */
-function readKeychainSecret(service: string): Promise<string | undefined> {
-	return new Promise((resolve, reject) => {
-		execFile(
-			"security",
-			["find-generic-password", "-s", service, "-a", userInfo().username, "-w"],
-			{ timeout: REQUEST_TIMEOUT_MS },
-			(err, stdout) => {
-				if (err) {
-					// Fall back to a service-only lookup (account name may differ).
-					execFile(
-						"security",
-						["find-generic-password", "-s", service, "-w"],
-						{ timeout: REQUEST_TIMEOUT_MS },
-						(err2, stdout2) => {
-							if (err2) return resolve(undefined);
-							resolve(stdout2.trim() || undefined);
-						},
-					);
-					return;
-				}
-				resolve(stdout.trim() || undefined);
-			},
-		);
+/** `security`'s exit code when the requested item simply isn't in the keychain. */
+const SEC_ITEM_NOT_FOUND = 44;
+
+/** Outcome of a Keychain read: the secret, or *why* we couldn't get it. */
+type KeychainResult = { secret: string } | { error: "notfound" | "blocked" };
+
+/** Run one `security find-generic-password -w` lookup. */
+function securityLookup(args: string[]): Promise<KeychainResult> {
+	return new Promise((resolve) => {
+		execFile("security", ["find-generic-password", ...args, "-w"], { timeout: REQUEST_TIMEOUT_MS }, (err, stdout) => {
+			if (err) {
+				// Exit 44 = item genuinely absent (signed out). Anything else — a locked
+				// keychain, a denied/dismissed access prompt, a timeout, or a spawn
+				// failure — means the item is likely there but we couldn't read it.
+				// execFile reports the process exit code on `code` (number); a spawn
+				// failure puts a string there (e.g. "ENOENT") — both count as blocked.
+				const code = (err as { code?: number | string }).code;
+				return resolve({ error: code === SEC_ITEM_NOT_FOUND ? "notfound" : "blocked" });
+			}
+			const secret = stdout.trim();
+			resolve(secret ? { secret } : { error: "notfound" });
+		});
 	});
+}
+
+/**
+ * Read a raw secret from the macOS login Keychain via the `security` CLI.
+ *
+ * Reports *why* a read failed so callers can tell a real sign-out ("notfound")
+ * apart from a keychain that's locked or hasn't been granted access ("blocked").
+ */
+async function readKeychainSecret(service: string): Promise<KeychainResult> {
+	const byAccount = await securityLookup(["-s", service, "-a", userInfo().username]);
+	if ("secret" in byAccount) return byAccount;
+	// Retry without the account (the stored account name may differ); prefer the
+	// "blocked" signal from either attempt over a plain "notfound".
+	const byService = await securityLookup(["-s", service]);
+	if ("secret" in byService) return byService;
+	return byAccount.error === "blocked" || byService.error === "blocked" ? { error: "blocked" } : { error: "notfound" };
 }
 
 /**
@@ -86,11 +106,25 @@ async function getAccessToken(force = false): Promise<string> {
 	}
 
 	// Primary source on macOS: the Keychain item Claude Code writes/refreshes.
-	const raw =
-		process.platform === "darwin"
-			? await readKeychainSecret(KEYCHAIN_SERVICE)
-			: // Other platforms keep the same JSON in a file under ~/.claude.
-				await readFile(`${homedir()}/.claude/.credentials.json`, "utf8").catch(() => undefined);
+	let raw: string | undefined;
+	if (process.platform === "darwin") {
+		const result = await readKeychainSecret(KEYCHAIN_SERVICE);
+		if ("error" in result) {
+			if (result.error === "blocked") {
+				// The item is there but locked / not approved — actionable, distinct from
+				// a real sign-out so the log and key say what to actually do.
+				throw new ClaudeError("Keychain access blocked — press the key, choose Always Allow.", {
+					unauthorized: true,
+					keychainBlocked: true,
+				});
+			}
+			throw new ClaudeError("Sign in with Claude Code first.", { unauthorized: true });
+		}
+		raw = result.secret;
+	} else {
+		// Other platforms keep the same JSON in a file under ~/.claude.
+		raw = await readFile(`${homedir()}/.claude/.credentials.json`, "utf8").catch(() => undefined);
+	}
 
 	if (!raw) {
 		throw new ClaudeError("Sign in with Claude Code first.", { unauthorized: true });

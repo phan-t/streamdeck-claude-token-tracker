@@ -73,22 +73,30 @@ export function barsImage({ rows, stale = false }: { rows: BarRow[]; stale?: boo
 	return toDataUri(svg);
 }
 
-function buildErrorImage(label: string): string {
+function buildErrorImage(label: string, hint: string): string {
 	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
 	<rect width="${SIZE}" height="${SIZE}" fill="#000000"/>
 	<text x="${SIZE / 2}" y="38" text-anchor="middle" font-family="${FONT}" font-size="24" font-weight="600" fill="#FFFFFF">${escapeXml(label)}</text>
 	<text x="${SIZE / 2}" y="86" text-anchor="middle" font-family="${FONT}" font-size="40" fill="#FFCC00">⚠</text>
-	<text x="${SIZE / 2}" y="120" text-anchor="middle" font-family="${FONT}" font-size="22" fill="#AAAAAA">setup</text>
+	<text x="${SIZE / 2}" y="120" text-anchor="middle" font-family="${FONT}" font-size="22" fill="#AAAAAA">${escapeXml(hint)}</text>
 </svg>`;
 
 	return toDataUri(svg);
 }
 
-let cachedDefaultError: string | undefined;
+const errorCache = new Map<string, string>();
 
-/** Fallback image shown when usage can't be read / the user isn't signed in. */
-export function errorImage(label = "Claude"): string {
-	// The default-label image is a constant rendered on every failing poll — cache it.
-	if (label === "Claude") return (cachedDefaultError ??= buildErrorImage(label));
-	return buildErrorImage(label);
+/**
+ * Fallback image shown when usage can't be read / the user isn't signed in.
+ * `hint` is the small bottom line — e.g. "setup", "sign in", "keychain".
+ */
+export function errorImage(label = "Claude", hint = "setup"): string {
+	// Rendered on every failing poll — cache per (label, hint) combination.
+	const key = `${label}|${hint}`;
+	let image = errorCache.get(key);
+	if (image === undefined) {
+		image = buildErrorImage(label, hint);
+		errorCache.set(key, image);
+	}
+	return image;
 }

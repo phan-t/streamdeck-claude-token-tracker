@@ -21,6 +21,15 @@ const MAX_BACKOFF_MS = 30 * 60_000;
 /** What each key is currently showing, used to fire a single alert per transition. */
 type DisplayState = "ok" | "stale" | "no-data";
 
+/** Bottom-line hint for the no-data error image, chosen from the failure cause. */
+function errorHintFor(err: unknown): string {
+	if (err instanceof ClaudeError) {
+		if (err.keychainBlocked) return "keychain";
+		if (err.unauthorized) return "sign in";
+	}
+	return "setup";
+}
+
 /** One visible key (action context) the plugin is currently driving. */
 type KeyEntry = {
 	action: ActionInstance;
@@ -62,6 +71,10 @@ export abstract class PollingAction extends SingletonAction<ActionSettings> {
 	private backoffStep = 0;
 	/** Server-advised wait from the most recent 429's Retry-After, if any. */
 	private retryAfterMs?: number;
+	/** Message of the current failure run; used to log only when the reason changes. */
+	private lastFailureMessage?: string;
+	/** Bottom-line hint for the no-data error image ("setup" | "sign in" | "keychain"). */
+	private errorHint?: string;
 
 	/** Subclasses turn readings + settings into a key image (data URI). */
 	protected abstract draw(readings: ClaudeReadings, settings: ActionSettings, stale: boolean): string;
@@ -149,13 +162,16 @@ export abstract class PollingAction extends SingletonAction<ActionSettings> {
 		if (this.keys.size === 0 || this.polling) return;
 		this.polling = true;
 		try {
-			const wasStale = this.stale;
 			try {
 				this.lastReadings = await getUsage(force);
 				this.stale = false;
 				this.backoffStep = 0;
 				this.retryAfterMs = undefined;
-				if (wasStale) streamDeck.logger.info("Claude usage poll recovered.");
+				this.errorHint = undefined;
+				if (this.lastFailureMessage !== undefined) {
+					streamDeck.logger.info("Claude usage poll recovered.");
+					this.lastFailureMessage = undefined;
+				}
 			} catch (err) {
 				// Cache softening: keep the last good reading on screen, just marked stale.
 				// With no good reading yet, fall through to the setup error image.
@@ -167,9 +183,13 @@ export abstract class PollingAction extends SingletonAction<ActionSettings> {
 					this.backoffStep = 0;
 					this.retryAfterMs = undefined;
 				}
-				if (!wasStale || !this.lastReadings) {
-					const message = err instanceof ClaudeError ? err.message : String(err);
+				this.errorHint = errorHintFor(err);
+				// Log once per distinct reason — re-logs when the cause changes
+				// (e.g. network → keychain), but doesn't spam an unchanged failure.
+				const message = err instanceof ClaudeError ? err.message : String(err);
+				if (message !== this.lastFailureMessage) {
 					streamDeck.logger.warn(`Claude usage poll failing: ${message}`);
+					this.lastFailureMessage = message;
 				}
 			}
 
@@ -199,7 +219,7 @@ export abstract class PollingAction extends SingletonAction<ActionSettings> {
 
 	/** Build (or reuse, via `memo`) the key image for the current global state. */
 	private imageFor(settings: ActionSettings, memo?: Map<string, string>): string {
-		if (!this.lastReadings) return errorImage();
+		if (!this.lastReadings) return errorImage("Claude", this.errorHint ?? "setup");
 		// Keys with identical settings render the same image this cycle — build once.
 		const sig = `${this.stale ? 1 : 0}|${JSON.stringify(settings)}`;
 		const cached = memo?.get(sig);

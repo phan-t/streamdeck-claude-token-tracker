@@ -14,9 +14,19 @@
 			<div style="font-size: 11px; line-height: 1.4; opacity: 0.85">
 				Reads the OAuth token Claude Code stores in your macOS Keychain
 				(<code>Claude&nbsp;Code-credentials</code>) and calls Anthropic's usage
-				endpoint — no login here. The first poll may show a Keychain access prompt;
-				choose <b>Always Allow</b>. Press the key any time to refresh now. The usage
+				endpoint — no login here. The Keychain prompt names the
+				<code>security</code> tool; choose <b>Always Allow</b> (not just "Allow")
+				so it doesn't re-ask. Press the key any time to refresh now. The usage
 				endpoint is rate-limited, so keep the interval at 60s or higher.
+			</div>
+		</sdpi-item>
+
+		<sdpi-item label="Dimmed key?">
+			<div style="font-size: 11px; line-height: 1.4; opacity: 0.85">
+				A dimmed key is showing the last-good reading because the last poll failed.
+				Press it to retry. With no reading yet, the key shows a hint:
+				<b>keychain</b> = grant access (<b>Always Allow</b>);
+				<b>sign in</b> = sign in with Claude Code; <b>setup</b> = offline / rate-limited.
 			</div>
 		</sdpi-item>
 	</body>
