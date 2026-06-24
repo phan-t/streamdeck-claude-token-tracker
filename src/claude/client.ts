@@ -18,11 +18,6 @@ const USER_AGENT = "claude-code/1.0.0 (streamdeck-claude-token-tracker)";
 /** Name of the macOS Keychain item Claude Code stores its OAuth tokens under. */
 const KEYCHAIN_SERVICE = "Claude Code-credentials";
 
-/** Re-read the token this long before it actually expires, to avoid 401 churn. */
-const TOKEN_EXPIRY_SKEW_MS = 60_000;
-/** Fallback in-memory token lifetime when the credentials carry no expiry. */
-const TOKEN_FALLBACK_TTL_MS = 5 * 60_000;
-
 /** Errors with a user-facing message safe to show on a key / log. */
 export class ClaudeError extends Error {
 	/** The credentials were rejected (HTTP 401/403) — the user must (re)sign in. */
@@ -48,9 +43,6 @@ export class ClaudeError extends Error {
 
 let cache: { readings: ClaudeReadings } | undefined;
 let inflight: Promise<ClaudeReadings> | undefined;
-// Cache the OAuth token in memory so steady-state polls don't spawn `security`
-// (or re-read the credentials file) every cycle — only near expiry or after a 401.
-let tokenCache: { token: string; expiresAt: number } | undefined;
 
 /** `security`'s exit code when the requested item simply isn't in the keychain. */
 const SEC_ITEM_NOT_FOUND = 44;
@@ -96,15 +88,13 @@ async function readKeychainSecret(service: string): Promise<KeychainResult> {
 /**
  * Pull the OAuth access token Claude Code maintains for the signed-in user.
  *
- * The token is cached in memory until shortly before its expiry; pass
- * `force` (e.g. after a 401) to bypass the cache and re-read the source, picking
- * up a token Claude Code may have rotated in the background.
+ * Always reads the live source (Keychain on macOS, credentials file elsewhere)
+ * rather than caching the token in memory: Claude Code rotates the token in the
+ * background and invalidates the old one well before its stated `expiresAt`, so a
+ * cached token goes dead (→ 401) long before we'd think to re-read it. The read is
+ * gated by {@link getUsage}'s own cache + poll interval, so it runs ~once a minute.
  */
-async function getAccessToken(force = false): Promise<string> {
-	if (!force && tokenCache && Date.now() < tokenCache.expiresAt - TOKEN_EXPIRY_SKEW_MS) {
-		return tokenCache.token;
-	}
-
+async function getAccessToken(): Promise<string> {
 	// Primary source on macOS: the Keychain item Claude Code writes/refreshes.
 	let raw: string | undefined;
 	if (process.platform === "darwin") {
@@ -130,7 +120,7 @@ async function getAccessToken(force = false): Promise<string> {
 		throw new ClaudeError("Sign in with Claude Code first.", { unauthorized: true });
 	}
 
-	let oauth: { accessToken?: string; expiresAt?: number } | undefined;
+	let oauth: { accessToken?: string } | undefined;
 	try {
 		oauth = JSON.parse(raw)?.claudeAiOauth;
 	} catch {
@@ -141,14 +131,6 @@ async function getAccessToken(force = false): Promise<string> {
 	if (!token) {
 		throw new ClaudeError("Sign in with Claude Code first.", { unauthorized: true });
 	}
-
-	// `expiresAt` is epoch millis when present; otherwise cache briefly so a rotated
-	// token is still picked up reasonably soon.
-	const expiresAt =
-		typeof oauth?.expiresAt === "number" && oauth.expiresAt > Date.now()
-			? oauth.expiresAt
-			: Date.now() + TOKEN_FALLBACK_TTL_MS;
-	tokenCache = { token, expiresAt };
 	return token;
 }
 
@@ -237,18 +219,10 @@ export async function getUsage(force = false): Promise<ClaudeReadings> {
 
 	inflight = (async () => {
 		try {
-			let data: UsageResponse;
-			try {
-				data = await fetchUsage(await getAccessToken());
-			} catch (err) {
-				// A 401 likely means the cached token was rotated/expired — re-read the
-				// source once and retry before surfacing a sign-in error.
-				if (err instanceof ClaudeError && err.unauthorized) {
-					data = await fetchUsage(await getAccessToken(true));
-				} else {
-					throw err;
-				}
-			}
+			// getAccessToken() always reads the live keychain token, so a 401 here is a
+			// genuine sign-in problem — no stale-cache retry to do (which would only
+			// double our request volume against an aggressively rate-limited endpoint).
+			const data = await fetchUsage(await getAccessToken());
 			const readings = normalize(data, Date.now());
 			cache = { readings };
 			return readings;
