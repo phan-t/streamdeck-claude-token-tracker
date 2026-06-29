@@ -8,7 +8,8 @@
     "build": "rollup -c",
     "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart tphan.claudeusage\"",
     "lint": "tsc --noEmit",
-    "gen:icons": "node scripts/gen-icons.mjs"
+    "gen:icons": "node scripts/gen-icons.mjs",
+    "gen:docs": "node scripts/gen-docs.mjs"
   },
   "author": "TP Studios",
   "license": "MIT",

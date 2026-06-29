@@ -5,6 +5,10 @@ Show your Claude usage on a single Stream Deck key as two stacked horizontal bar
 - **Session** — the rolling 5‑hour limit: percentage used, with time‑to‑reset underneath.
 - **Weekly** — the rolling 7‑day limit: percentage used, with time‑to‑reset underneath.
 
+![The key, live, stale, and during setup](docs/keys.svg)
+
+<sub>Left to right: live reading · last‑good reading dimmed when a poll fails · the setup screen shown before you're signed in.</sub>
+
 The layout (bars, fonts, sizes) mirrors [streamdeck-enphase](https://github.com/phan-t/streamdeck-enphase).
 
 <sub>Not affiliated with Anthropic. Uses an undocumented endpoint that may change.</sub>
@@ -41,6 +45,7 @@ Logs live at `~/Library/Application Support/com.elgato.StreamDeck/Plugins/tphan.
 ```sh
 npm install
 npm run gen:icons        # generate the PNG icons
+npm run gen:docs         # regenerate the README preview SVGs (docs/)
 npm run build            # bundle src/ into the .sdPlugin/bin
 npx streamdeck link tphan.claudeusage.sdPlugin   # install the dev plugin
 npm run watch            # rebuild + restart on change
@@ -71,5 +76,7 @@ src/
     format.ts               percent + reset‑countdown formatting
     types.ts                settings, API + reading types
 scripts/gen-icons.mjs       generates plugin/action PNGs
+scripts/gen-docs.mjs        generates the README preview SVGs (docs/)
+docs/                       static key previews (key, key-stale, key-setup, keys)
 tphan.claudeusage.sdPlugin/ the installed plugin package (manifest, ui, imgs, bin)
 ```
